@@ -1,0 +1,16 @@
+services:
+  mobyprint:
+    build: .
+    # Host network mode is needed for CUPS to discover network printers
+    # via mDNS/Avahi. If you prefer, you can use port mapping instead
+    # and configure the printer manually.
+    network_mode: host
+    volumes:
+      - uploads:/tmp/mobyprint
+    environment:
+      - MOBYPRINT_PORT=8631
+      - MOBYPRINT_UPLOAD_DIR=/tmp/mobyprint
+    restart: unless-stopped
+
+volumes:
+  uploads:

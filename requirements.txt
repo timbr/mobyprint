@@ -1,0 +1,5 @@
+Flask==3.1.*
+pypdf==5.*
+pycups==2.*
+pdf2image==1.*
+Werkzeug==3.*
