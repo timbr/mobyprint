@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mobyprint</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    header p {
+      color: #666;
+      margin-top: 0.25rem;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    .field { margin-bottom: 1.25rem; }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 0.4rem;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      font-size: 1rem;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      border-color: #3b7cf4;
+    }
+
+    /* File drop zone */
+    .drop-zone {
+      border: 2px dashed #c5ccd8;
+      border-radius: 12px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      background: #f0f5ff;
+      border-color: #3b7cf4;
+    }
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .drop-zone .hint { color: #888; font-size: 0.9rem; }
+    .drop-zone .chosen { font-weight: 600; color: #3b7cf4; font-size: 0.95rem; }
+
+    .row { display: flex; gap: 1rem; }
+    .row .field { flex: 1; }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 0.85rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      background: #3b7cf4;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      margin-top: 0.5rem;
+    }
+    button[type="submit"]:hover { background: #2d6de0; }
+    button[type="submit"]:active { opacity: 0.85; }
+    button[type="submit"]:disabled { background: #aaa; cursor: not-allowed; }
+
+    .message {
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    .message.success { background: #e6f9f0; color: #1a7a48; }
+    .message.error   { background: #fef0f0; color: #b91c1c; }
+
+    .spinner {
+      display: none;
+      width: 1.1rem; height: 1.1rem;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🖨 mobyprint</h1>
+    <p>Print PDFs from your phone</p>
+  </header>
+
+  <div class="card">
+    {% if success %}
+    <div class="message success">{{ success }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="message error">{{ error }}</div>
+    {% endif %}
+
+    <form id="printForm" method="POST" action="/print" enctype="multipart/form-data" autocomplete="off">
+
+      <div class="field">
+        <label for="file">PDF file</label>
+        <div class="drop-zone" id="dropZone">
+          <div class="icon">📄</div>
+          <div class="hint" id="dropHint">Tap to choose a PDF</div>
+          <input type="file" name="file" id="file" accept="application/pdf,.pdf" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="printer_url">Printer URL</label>
+        <input type="text" name="printer_url" id="printer_url"
+               placeholder="ipp://192.168.1.100/ipp/print"
+               value="{{ default_printer }}"
+               required>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="copies">Copies</label>
+          <input type="number" name="copies" id="copies" value="1" min="1" max="99">
+        </div>
+        <div class="field">
+          <label for="job_name">Job name <span style="font-weight:400;color:#aaa">(optional)</span></label>
+          <input type="text" name="job_name" id="job_name" placeholder="e.g. Invoice">
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn">
+        <span id="btnText">Print</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+
+    </form>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'mobyprint_printer_url';
+    const printerInput = document.getElementById('printer_url');
+    const fileInput    = document.getElementById('file');
+    const dropHint     = document.getElementById('dropHint');
+    const dropZone     = document.getElementById('dropZone');
+    const form         = document.getElementById('printForm');
+    const submitBtn    = document.getElementById('submitBtn');
+    const btnText      = document.getElementById('btnText');
+    const spinner      = document.getElementById('spinner');
+
+    // Persist printer URL in localStorage
+    if (!printerInput.value) {
+      printerInput.value = localStorage.getItem(STORAGE_KEY) || '';
+    }
+    printerInput.addEventListener('input', () => {
+      localStorage.setItem(STORAGE_KEY, printerInput.value);
+    });
+
+    // Show chosen filename
+    fileInput.addEventListener('change', () => {
+      dropHint.textContent = fileInput.files[0]
+        ? fileInput.files[0].name
+        : 'Tap to choose a PDF';
+      dropHint.classList.toggle('chosen', !!fileInput.files[0]);
+    });
+
+    // Drag-and-drop styling
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', () => dropZone.classList.remove('dragover'));
+
+    // Loading state on submit
+    form.addEventListener('submit', () => {
+      submitBtn.disabled = true;
+      btnText.style.display = 'none';
+      spinner.style.display = 'block';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+services:
+  mobyprint:
+    build: .
+    # Host networking lets avahi multicast reach the real network interface,
+    # which is what makes mobyprint.local resolvable on other devices.
+    # This works on Linux (including Raspberry Pi).
+    # On Docker Desktop for Mac/Windows use the "bridge" profile below instead.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Pre-fill the printer URL in the web UI.
+      # Set this to your printer's IPP address, e.g.:
+      #   PRINTER_URL=ipp://192.168.1.100/ipp/print
+      - PRINTER_URL=${PRINTER_URL:-}
+      - PORT=80
+
+# --------------------------------------------------------------------
+# Alternative for Docker Desktop (Mac / Windows):
+#   docker compose --profile bridge up
+#
+# Access via http://localhost:8080 — mobyprint.local won't work because
+# Docker Desktop doesn't support network_mode: host.
+# --------------------------------------------------------------------
+  mobyprint-bridge:
+    build: .
+    profiles: [bridge]
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    environment:
+      - PRINTER_URL=${PRINTER_URL:-}
+      - PORT=80
