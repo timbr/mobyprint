@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir flask
 
 WORKDIR /app
-COPY mobyprint.py app.py ./
+COPY ipp.py app.py ./
 COPY templates/ templates/
 
 # Override avahi config to advertise as "mobyprint"

@@ -5,7 +5,7 @@ import os
 
 from flask import Flask, render_template, request
 
-from mobyprint import (
+from ipp import (
     build_print_job,
     normalise_printer_url,
     parse_status,
