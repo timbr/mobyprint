@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Preview - mobyprint</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>mobyprint</h1>
+            <p>Select pages to print</p>
+        </header>
+
+        <div class="file-info">
+            <div class="name">{{ filename }}</div>
+            <div class="meta">
+                {{ page_count }} page{{ 's' if page_count != 1 else '' }}
+                {% if is_scaled %} &middot; Scaled to A4{% endif %}
+            </div>
+        </div>
+
+        <div class="page-controls">
+            <input type="text" class="page-range-input" id="pageRange"
+                   placeholder="e.g. 1-3, 5, 7" title="Page range">
+            <button class="btn btn-outline btn-sm" id="selectAll">All</button>
+            <button class="btn btn-outline btn-sm" id="selectNone">None</button>
+        </div>
+
+        <div class="page-grid" id="pageGrid">
+        </div>
+
+        <div class="print-options">
+            <div class="row">
+                <label for="printerUrl">Printer</label>
+                <input type="text" id="printerUrl"
+                       placeholder="ipp://192.168.1.100/ipp/print"
+                       value="{{ default_printer }}">
+            </div>
+            <div class="row">
+                <label for="copies">Copies</label>
+                <input type="number" id="copies" value="1" min="1" max="99">
+            </div>
+        </div>
+
+        <div class="print-actions">
+            <button class="btn btn-primary" id="printBtn">
+                Print selected pages
+            </button>
+            <a href="/" class="btn btn-outline">Upload another file</a>
+        </div>
+
+        <div class="status" id="printStatus"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs" type="module"></script>
+    <script type="module">
+        import { GlobalWorkerOptions, getDocument } from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs';
+        GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs';
+
+        const JOB_ID = '{{ job_id }}';
+        const PAGE_COUNT = {{ page_count }};
+        const STORAGE_KEY = 'mobyprint_printer_url';
+        const grid = document.getElementById('pageGrid');
+        const printBtn = document.getElementById('printBtn');
+        const printStatus = document.getElementById('printStatus');
+        const pageRangeInput = document.getElementById('pageRange');
+        const printerInput = document.getElementById('printerUrl');
+
+        // Persist printer URL in localStorage
+        if (!printerInput.value) {
+            printerInput.value = localStorage.getItem(STORAGE_KEY) || '';
+        }
+        printerInput.addEventListener('input', () => {
+            localStorage.setItem(STORAGE_KEY, printerInput.value);
+        });
+
+        const selected = new Set();
+        for (let i = 0; i < PAGE_COUNT; i++) selected.add(i);
+
+        const pdf = await getDocument(`/api/pdf/${JOB_ID}`).promise;
+
+        for (let i = 0; i < PAGE_COUNT; i++) {
+            const card = document.createElement('div');
+            card.className = 'page-card selected';
+            card.dataset.page = i;
+
+            const canvas = document.createElement('canvas');
+            const checkDiv = document.createElement('div');
+            checkDiv.className = 'check';
+            checkDiv.innerHTML = '&#10003;';
+
+            const numDiv = document.createElement('div');
+            numDiv.className = 'page-num';
+            numDiv.textContent = `Page ${i + 1}`;
+
+            card.appendChild(canvas);
+            card.appendChild(checkDiv);
+            card.appendChild(numDiv);
+            grid.appendChild(card);
+
+            const page = await pdf.getPage(i + 1);
+            const viewport = page.getViewport({ scale: 0.5 });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport }).promise;
+
+            card.addEventListener('click', () => {
+                const pageIdx = parseInt(card.dataset.page);
+                if (selected.has(pageIdx)) {
+                    selected.delete(pageIdx);
+                    card.classList.remove('selected');
+                } else {
+                    selected.add(pageIdx);
+                    card.classList.add('selected');
+                }
+                updatePrintButton();
+                syncPageRange();
+            });
+        }
+
+        document.getElementById('selectAll').addEventListener('click', () => {
+            for (let i = 0; i < PAGE_COUNT; i++) selected.add(i);
+            updateCards();
+            syncPageRange();
+        });
+
+        document.getElementById('selectNone').addEventListener('click', () => {
+            selected.clear();
+            updateCards();
+            syncPageRange();
+        });
+
+        pageRangeInput.addEventListener('input', () => {
+            const ranges = parsePageRange(pageRangeInput.value);
+            if (ranges !== null) {
+                selected.clear();
+                for (const idx of ranges) selected.add(idx);
+                updateCards();
+            }
+        });
+
+        function parsePageRange(str) {
+            if (!str.trim()) return null;
+            const result = new Set();
+            const parts = str.split(',');
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (!trimmed) continue;
+                const match = trimmed.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+                if (!match) return null;
+                const start = parseInt(match[1]);
+                const end = match[2] ? parseInt(match[2]) : start;
+                for (let i = start; i <= end && i <= PAGE_COUNT; i++) {
+                    result.add(i - 1);
+                }
+            }
+            return result;
+        }
+
+        function syncPageRange() {
+            const sorted = [...selected].sort((a, b) => a - b);
+            if (sorted.length === 0 || sorted.length === PAGE_COUNT) {
+                pageRangeInput.value = '';
+                return;
+            }
+            const ranges = [];
+            let start = sorted[0];
+            let end = start;
+            for (let i = 1; i < sorted.length; i++) {
+                if (sorted[i] === end + 1) {
+                    end = sorted[i];
+                } else {
+                    ranges.push(start === end ? `${start + 1}` : `${start + 1}-${end + 1}`);
+                    start = sorted[i];
+                    end = start;
+                }
+            }
+            ranges.push(start === end ? `${start + 1}` : `${start + 1}-${end + 1}`);
+            pageRangeInput.value = ranges.join(', ');
+        }
+
+        function updateCards() {
+            grid.querySelectorAll('.page-card').forEach(card => {
+                const idx = parseInt(card.dataset.page);
+                card.classList.toggle('selected', selected.has(idx));
+            });
+            updatePrintButton();
+        }
+
+        function updatePrintButton() {
+            const count = selected.size;
+            printBtn.textContent = count === 0
+                ? 'No pages selected'
+                : `Print ${count} page${count !== 1 ? 's' : ''}`;
+            printBtn.disabled = count === 0;
+        }
+
+        printBtn.addEventListener('click', async () => {
+            if (selected.size === 0) return;
+
+            const printer = printerInput.value.trim();
+            if (!printer) {
+                printStatus.className = 'status error';
+                printStatus.textContent = 'Enter a printer URL first.';
+                printStatus.style.display = 'block';
+                printerInput.focus();
+                return;
+            }
+            localStorage.setItem(STORAGE_KEY, printer);
+
+            printBtn.disabled = true;
+            printBtn.innerHTML = '<span class="spinner"></span>Sending to printer...';
+            printStatus.className = 'status';
+            printStatus.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/print', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        job_id: JOB_ID,
+                        pages: [...selected].sort((a, b) => a - b),
+                        printer: printer,
+                        copies: parseInt(document.getElementById('copies').value) || 1,
+                    }),
+                });
+                const result = await resp.json();
+
+                if (result.success) {
+                    printStatus.className = 'status success';
+                    printStatus.textContent = result.message;
+                    printStatus.style.display = 'block';
+                } else {
+                    printStatus.className = 'status error';
+                    printStatus.textContent = result.error || 'Print failed.';
+                    printStatus.style.display = 'block';
+                }
+            } catch (e) {
+                printStatus.className = 'status error';
+                printStatus.textContent = 'Network error. Please try again.';
+                printStatus.style.display = 'block';
+            }
+
+            printBtn.disabled = false;
+            updatePrintButton();
+        });
+
+        updatePrintButton();
+    </script>
+</body>
+</html>

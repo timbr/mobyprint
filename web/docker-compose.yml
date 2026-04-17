@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "8080:80"
+    volumes:
+      - uploads:/tmp/mobyprint
     restart: unless-stopped
     environment:
       # Pre-fill the printer URL in the web UI.
@@ -23,7 +25,12 @@ services:
     build: .
     profiles: [host-net]
     network_mode: host
+    volumes:
+      - uploads:/tmp/mobyprint
     restart: unless-stopped
     environment:
       - PRINTER_URL=${PRINTER_URL:-}
       - PORT=80
+
+volumes:
+  uploads:

@@ -1,27 +1,29 @@
 FROM python:3.12-slim
 
-# avahi-daemon  — mDNS advertisement
+# avahi-daemon  — mDNS advertisement (mobyprint.local)
 # dbus          — required by avahi
+# libreoffice-writer — DOCX to PDF conversion
 RUN apt-get update && apt-get install -y --no-install-recommends \
         avahi-daemon \
         dbus \
+        libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir flask
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
-COPY ipp.py app.py ./
+COPY ipp.py app.py converter.py ./
 COPY templates/ templates/
+COPY static/ static/
 
-# Override avahi config to advertise as "mobyprint"
 COPY avahi-daemon.conf /etc/avahi/avahi-daemon.conf
 
 COPY entrypoint.sh /entrypoint.sh
-# Strip Windows CRLF line endings in case the file was checked out on Windows
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
-# Port 80 is used directly via network_mode: host — no mapping needed.
-# EXPOSE is informational only.
+RUN mkdir -p /tmp/mobyprint
+
 EXPOSE 80
 
 CMD ["/entrypoint.sh"]
