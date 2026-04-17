@@ -1,0 +1,4 @@
+# Ensure shell scripts always use LF line endings, regardless of the OS
+# cloning the repo. CRLF in a shebang line breaks script execution on Linux.
+*.sh        text eol=lf
+entrypoint* text eol=lf
