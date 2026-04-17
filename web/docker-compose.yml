@@ -1,11 +1,8 @@
 services:
   mobyprint:
     build: .
-    # Host networking lets avahi multicast reach the real network interface,
-    # which is what makes mobyprint.local resolvable on other devices.
-    # This works on Linux (including Raspberry Pi).
-    # On Docker Desktop for Mac/Windows use the "bridge" profile below instead.
-    network_mode: host
+    ports:
+      - "8080:80"
     restart: unless-stopped
     environment:
       # Pre-fill the printer URL in the web UI.
@@ -15,17 +12,17 @@ services:
       - PORT=80
 
 # --------------------------------------------------------------------
-# Alternative for Docker Desktop (Mac / Windows):
-#   docker compose --profile bridge up
+# Linux / Raspberry Pi — host networking enables mobyprint.local via mDNS
 #
-# Access via http://localhost:8080 — mobyprint.local won't work because
-# Docker Desktop doesn't support network_mode: host.
+#   docker compose --profile host-net up -d
+#
+# Access via http://mobyprint.local on any device on the same network.
+# Does NOT work on Docker Desktop (Mac / Windows).
 # --------------------------------------------------------------------
-  mobyprint-bridge:
+  mobyprint-mdns:
     build: .
-    profiles: [bridge]
-    ports:
-      - "8080:80"
+    profiles: [host-net]
+    network_mode: host
     restart: unless-stopped
     environment:
       - PRINTER_URL=${PRINTER_URL:-}
